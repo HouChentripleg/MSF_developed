@@ -131,6 +131,7 @@ class PositionPoseSensorManager : public msf_core::MSF_SensorManagerROS<
       config.core_set_height = false;
     }
   }
+
   bool InitScale(sensor_fusion_comm::InitScale::Request &req,
                    sensor_fusion_comm::InitScale::Response &res) {
       ROS_INFO("Initialize filter with scale %f", req.scale);
@@ -138,6 +139,7 @@ class PositionPoseSensorManager : public msf_core::MSF_SensorManagerROS<
       res.result = "Initialized scale";
       return true;
   }
+
   void Init(double scale) const {
     Eigen::Matrix<double, 3, 1> p, v, b_w, b_a, g, w_m, a_m, p_ic, p_vc, p_wv,
         p_ip, p_pos;
@@ -259,6 +261,7 @@ class PositionPoseSensorManager : public msf_core::MSF_SensorManagerROS<
     scale << 1.0;
     state.Set < StateDefinition_T::L > (scale);
   }
+  
   virtual void InitState(EKFState_T& state) const {
     UNUSED(state);
   }

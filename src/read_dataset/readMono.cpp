@@ -42,7 +42,7 @@ int main(int argc, char** argv) {
     ros::NodeHandle nh("~");
     ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug);
     // Publisher
-    ros::Publisher pubImage = nh.advertise<sensor_msgs::Image>("/camera/image_raw",1000);
+    ros::Publisher pubImage = nh.advertise<sensor_msgs::Image>("/camera/rgb/image_raw",1000);
     ros::Publisher pubImu = nh.advertise<sensor_msgs::Imu>("/imu",1000);
     ros::Publisher pubOrignGnss = nh.advertise<sensor_msgs::NavSatFix>("/gps/fix",1000);
 
