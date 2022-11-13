@@ -13,6 +13,7 @@ find_package(catkin REQUIRED COMPONENTS
 )
 find_package(OpenCV REQUIRED)
 find_package(Eigen3 REQUIRED)
+include_directories("/tmp/geographic/include/")
 include_directories("/usr/include/eigen3")
 include_directories(
 	${catkin_INCLUDE_DIRS}
@@ -39,11 +40,16 @@ catkin_package(
 )
 add_executable(read_node  src/read_dataset/main.cpp)
 add_executable(lcsfl_node src/position_pose_msf/main.cpp)
+add_executable(readMono  src/read_dataset/readMono.cpp)
 
 target_link_libraries(lcsfl_node 
     ${catkin_LIBRARIES}
 )
 target_link_libraries(read_node
+		${catkin_LIBRARIES}
+		${OpenCV_LIBS}
+		)
+target_link_libraries(readMono
 		${catkin_LIBRARIES}
 		${OpenCV_LIBS}
 		)
