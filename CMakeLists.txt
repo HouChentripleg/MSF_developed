@@ -10,6 +10,7 @@ find_package(catkin REQUIRED COMPONENTS
         msf_updates
 	cv_bridge
 	sensor_msgs
+	vlp_msgs
 )
 find_package(OpenCV REQUIRED)
 find_package(Eigen3 REQUIRED)
@@ -38,22 +39,26 @@ catkin_package(
     LIBRARIES 
     	pose_distorter
 )
-add_executable(read_node  src/read_dataset/main.cpp)
-add_executable(lcsfl_node src/position_pose_msf/main.cpp)
-add_executable(readMono  src/read_dataset/readMono.cpp)
+# add_executable(read_node  src/read_dataset/main.cpp)
+#add_executable(lcsfl_node src/position_pose_msf/main.cpp)
+#add_executable(lcsfl_node src/pose_msf/main.cpp)
+add_executable(lcsfl_node src/position_msf/main.cpp)
+# add_executable(readMono  src/read_dataset/readMono.cpp)
+add_executable(readData src/read_dataset/readData.cpp)
 
 target_link_libraries(lcsfl_node 
     ${catkin_LIBRARIES}
 )
-target_link_libraries(read_node
+#target_link_libraries(read_node
+#		${catkin_LIBRARIES}
+#		${OpenCV_LIBS}
+#		)
+#target_link_libraries(readMono
+#		${catkin_LIBRARIES}
+#		${OpenCV_LIBS}
+#		)
+target_link_libraries(readData
 		${catkin_LIBRARIES}
-		${OpenCV_LIBS}
-		)
-target_link_libraries(readMono
-		${catkin_LIBRARIES}
-		${OpenCV_LIBS}
 		)
 
 add_dependencies(lcsfl_node  ${${PROJECT_NAME}_EXPORTED_TARGETS})
-
-

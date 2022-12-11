@@ -153,7 +153,7 @@ struct PositionMeasurement : public PositionMeasurementBase {
     if (isabsolute_) {  // Does this measurement refer to an absolute measurement,
       // or is it relative to the last measurement.
       // Get a const ref, so we can read core states.
-//      MSF_WARN_STREAM("***GPS H Matrix is calculating***");
+      MSF_WARN_STREAM("***GPS H Matrix is calculating***");
       const EKFState_T& state = *state_nonconst_new;
       // init variables
       Eigen::Matrix<double, nMeasurements,
@@ -170,6 +170,9 @@ struct PositionMeasurement : public PositionMeasurementBase {
       r_old.block<3, 1>(0, 0) = z_p_
           - (state.Get<StateDefinition_T::p>()
               + C_q.transpose() * state.Get<StateDefinition_T::p_ip>());
+
+      std::cout << "p before update: " << state.Get<StateDefinition_T::p>()[0] << ' ' << state.Get<StateDefinition_T::p>()[1] << ' ' << state.Get<StateDefinition_T::p>()[2] << std::endl;
+      std::cout << "residual in position: " << r_old[0] << ' ' << r_old[1] << ' ' << r_old[2] << std::endl;
 
       if (!CheckForNumeric(r_old, "r_old")) {
         MSF_ERROR_STREAM("r_old: "<<r_old);

@@ -106,6 +106,7 @@ class PositionSensorManager : public msf_core::MSF_SensorManagerROS<
       config.core_init_filter = false;
     }
   }
+
   bool InitScale(sensor_fusion_comm::InitScale::Request &req,
                    sensor_fusion_comm::InitScale::Response &res) {
       ROS_INFO("Initialize filter with scale %f", req.scale);
@@ -113,6 +114,7 @@ class PositionSensorManager : public msf_core::MSF_SensorManagerROS<
       res.result = "Initialized scale";
       return true;
   }
+  
   void Init(double scale) const {
     if (scale < 0.001) {
       MSF_WARN_STREAM("init scale is "<<scale<<" correcting to 1");
@@ -124,11 +126,11 @@ class PositionSensorManager : public msf_core::MSF_SensorManagerROS<
     msf_core::MSF_Core<EKFState_T>::ErrorStateCov P;
 
     // Init values.
-    g << 0, 0, 9.81;  /// Gravity.
+    g << 0, 0, 9.8;  /// Gravity.
     b_w << 0, 0, 0;		/// Bias gyroscopes.
     b_a << 0, 0, 0;		/// Bias accelerometer.
 
-    v << 0, 0, 0;			/// Robot velocity (IMU centered).
+    v << 3, 0, 0;			/// Robot velocity (IMU centered).
     w_m << 0, 0, 0;		/// Initial angular velocity.
 
     // Set the initial yaw alignment of body to world (the frame in which the
@@ -159,6 +161,7 @@ class PositionSensorManager : public msf_core::MSF_SensorManagerROS<
 
     // Calculate initial attitude and position based on sensor measurements.
     p = p_vc - q.toRotationMatrix() * p_ip;
+    // p << 18.52, -15.22, 31;
 
     a_m = q.inverse() * g;			    /// Initial acceleration.
 

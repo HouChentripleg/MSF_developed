@@ -175,9 +175,9 @@ struct PoseMeasurement : public PoseMeasurementBase {
     Eigen::Matrix<double, 3, 1> vecold;
 
     //Output the core state on the screen -wuzida
-//    MSF_INFO_STREAM("the fixed q :"<< STREAMQUAT(state.Get<StateDefinition_T::q>()));
-//    MSF_INFO_STREAM("the fixed qwv :"<< STREAMQUAT(state.Get<StateQwvIdx>()));
-//    MSF_INFO_STREAM("the fixed pwv :"<< state.Get<StatePwvIdx>());
+    MSF_INFO_STREAM("the fixed q :"<< STREAMQUAT(state.Get<StateDefinition_T::q>()));   // q_iw
+    MSF_INFO_STREAM("the fixed qwv :"<< STREAMQUAT(state.Get<StateQwvIdx>()));
+    MSF_INFO_STREAM("the fixed pwv :"<< state.Get<StatePwvIdx>());
 
     vecold = (-state.Get<StatePwvIdx>() + state.Get<StateDefinition_T::p>()
         + C_q * state.Get<StatePicIdx>()) * state.Get<StateLIdx>();
@@ -213,6 +213,12 @@ struct PoseMeasurement : public PoseMeasurementBase {
     bool calibattfix = (fixedstates_ & 1 << StateQicIdx);
     bool driftwvattfix = (fixedstates_ & 1 << StateQwvIdx);
     bool driftwvposfix = (fixedstates_ & 1 << StatePwvIdx);
+
+    std::cout << "scalefix: " << scalefix << std::endl;
+    std::cout << "calibposfix: " << calibposfix << std::endl;
+    std::cout << "calibattfix: " << calibattfix << std::endl;
+    std::cout << "driftwvattfix: " << driftwvattfix << std::endl;
+    std::cout << "driftwvposfix: " << driftwvposfix << std::endl;
 
     // Set crosscov to zero for fixed states.
     if (scalefix)
@@ -285,11 +291,11 @@ struct PoseMeasurement : public PoseMeasurementBase {
    */
   virtual void Apply(shared_ptr<EKFState_T> state_nonconst_new,
                      msf_core::MSF_Core<EKFState_T>& core) {
-
+    std::cout << "called apply() for pose measurement in pose_measurement.h\n";
     if (isabsolute_) {  // Does this measurement refer to an absolute measurement,
       // or is is just relative to the last measurement.
       // Get a const ref, so we can read core states
-//      MSF_WARN_STREAM("***SLAM H Matrix is calculating***");
+      MSF_WARN_STREAM("***SLAM H Matrix is calculating***");
       const EKFState_T& state = *state_nonconst_new;
       // init variables
       Eigen::Matrix<double, nMeasurements,
@@ -298,32 +304,40 @@ struct PoseMeasurement : public PoseMeasurementBase {
       CalculateH(state_nonconst_new, H_new);
 
       // Get rotation matrices.
-      Eigen::Matrix<double, 3, 3> C_wv = state.Get<StateQwvIdx>()
-
-          .conjugate().toRotationMatrix();
-      Eigen::Matrix<double, 3, 3> C_q = state.Get<StateDefinition_T::q>()
-          .conjugate().toRotationMatrix();
+      Eigen::Matrix<double, 3, 3> C_wv = state.Get<StateQwvIdx>().conjugate().toRotationMatrix();
+      Eigen::Matrix<double, 3, 3> C_q = state.Get<StateDefinition_T::q>().conjugate().toRotationMatrix();
 
       // Construct residuals.
       // Position.
+      std::cout << "*** residual is calculating ***\n";
+      std::cout << "z_p_: " << z_p_[0] << ' ' << z_p_[1] << ' ' << z_p_[2] << std::endl;
       r_old.block<3, 1>(0, 0) = z_p_
           - (C_wv.transpose()
               * (-state.Get<StatePwvIdx>()
                   + state.Get<StateDefinition_T::p>()
                   + C_q.transpose() * state.Get<StatePicIdx>()))
               * state.Get<StateLIdx>();
+      std::cout << "p_wv: " << state.Get<StatePwvIdx>()[0] << ' ' << state.Get<StatePwvIdx>()[1] << ' ' << state.Get<StatePwvIdx>()[2] << std::endl;
+      std::cout << "p: " << state.Get<StateDefinition_T::p>()[0] << ' ' << state.Get<StateDefinition_T::p>()[1] << ' ' << state.Get<StateDefinition_T::p>()[2] << std::endl;
+      std::cout << "q: " << STREAMQUAT(state.Get<StateDefinition_T::q>()) << std::endl;
+      std::cout << "l: " << state.Get<StateLIdx>()[0] << std::endl;
+      std::cout << "residual in position: " << r_old[0] << ' ' << r_old[1] << ' ' << r_old[2] << std::endl;
 
       // Attitude.
       Eigen::Quaternion<double> q_err;
       q_err = (state.Get<StateQwvIdx>()
           * state.Get<StateDefinition_T::q>()
           * state.Get<StateQicIdx>()).conjugate() * z_q_;
+      std::cout << "q_err :" << STREAMQUAT(q_err) << std::endl;
       r_old.block<3, 1>(3, 0) = q_err.vec() / q_err.w() * 2;
+      std::cout << "residual in q: " << r_old[3] << ' ' << r_old[4] << ' ' << r_old[5] << std::endl;
       // Vision world yaw drift.
       q_err = state.Get<StateQwvIdx>();
+      std::cout << "q_err :" << STREAMQUAT(q_err) << std::endl;
 
       r_old(6, 0) = -2 * (q_err.w() * q_err.z() + q_err.x() * q_err.y())
           / (1 - 2 * (q_err.y() * q_err.y() + q_err.z() * q_err.z()));
+      std::cout << "r_old(6, 0): " << r_old(6, 0) << std::endl;
 
       if (!CheckForNumeric(r_old, "r_old")) {
         MSF_ERROR_STREAM("r_old: "<<r_old);
@@ -341,9 +355,11 @@ struct PoseMeasurement : public PoseMeasurementBase {
             "state: "<<const_cast<EKFState_T&>(state). ToEigenVector().transpose());
       }
 
+      std::cout << "calculate r_old, H_new sucessfully\n";
       // Call update step in base class.
       this->CalculateAndApplyCorrection(state_nonconst_new, core, H_new, r_old,
                                         R_);
+      std::cout << "update step finished\n";
     } else {
       // Init variables: Get previous measurement.
       shared_ptr < msf_core::MSF_MeasurementBase<EKFState_T> > prevmeas_base =
@@ -396,12 +412,10 @@ struct PoseMeasurement : public PoseMeasurementBase {
       Eigen::Matrix<double, 3, 3> C_q_old, C_q_new;
 
       C_wv_new = state_new.Get<StateQwvIdx>().conjugate().toRotationMatrix();
-      C_q_new = state_new.Get<StateDefinition_T::q>().conjugate()
-          .toRotationMatrix();
+      C_q_new = state_new.Get<StateDefinition_T::q>().conjugate().toRotationMatrix();
 
       C_wv_old = state_old.Get<StateQwvIdx>().conjugate().toRotationMatrix();
-      C_q_old = state_old.Get<StateDefinition_T::q>().conjugate()
-          .toRotationMatrix();
+      C_q_old = state_old.Get<StateDefinition_T::q>().conjugate().toRotationMatrix();
 
       // Construct residuals.
       // Position:

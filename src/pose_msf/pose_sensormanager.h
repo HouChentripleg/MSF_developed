@@ -32,17 +32,20 @@
 
 namespace msf_pose_sensor {
 
+// about parameters: dynamic configuration
 typedef msf_updates::SinglePoseSensorConfig Config_T;
 typedef dynamic_reconfigure::Server<Config_T> ReconfigureServer;
 typedef shared_ptr<ReconfigureServer> ReconfigureServerPtr;
 
 class PoseSensorManager : public msf_core::MSF_SensorManagerROS<
     msf_updates::EKFState> {
+  // about sensor handler
   typedef PoseSensorHandler<msf_updates::pose_measurement::PoseMeasurement<>,
       PoseSensorManager> PoseSensorHandler_T;
   friend class PoseSensorHandler<msf_updates::pose_measurement::PoseMeasurement<>,
       PoseSensorManager> ;
- public:
+public:
+  // about EKF
   typedef msf_updates::EKFState EKFState_T;
   typedef EKFState_T::StateSequence_T StateSequence_T;
   typedef EKFState_T::StateDefinition_T StateDefinition_T;
@@ -51,17 +54,15 @@ class PoseSensorManager : public msf_core::MSF_SensorManagerROS<
     bool distortmeas = false;  ///< Distort the pose measurements.
 
     imu_handler_.reset(
-        new msf_core::IMUHandler_ROS<msf_updates::EKFState>(*this, "msf_core",
-                                                            "imu_handler"));
+        new msf_core::IMUHandler_ROS<msf_updates::EKFState>(*this, "msf_core", "imu_handler")); // prediction
     pose_handler_.reset(
-        new PoseSensorHandler_T(*this, "", "pose_sensor", distortmeas));
+        new PoseSensorHandler_T(*this, "", "pose_sensor", distortmeas));  // measurement
 
     AddHandler(pose_handler_);
 
-    reconf_server_.reset(new ReconfigureServer(pnh));
-    ReconfigureServer::CallbackType f = boost::bind(&PoseSensorManager::Config,
-                                                    this, _1, _2);
-    reconf_server_->setCallback(f);
+    reconf_server_.reset(new ReconfigureServer(pnh)); // initialize the config-server
+    ReconfigureServer::CallbackType f = boost::bind(&PoseSensorManager::Config, this, _1, _2);
+    reconf_server_->setCallback(f); // callback
 
     init_scale_srv_ = pnh.advertiseService("initialize_msf_scale",
                                            &PoseSensorManager::InitScale, this);
@@ -159,30 +160,30 @@ class PoseSensorManager : public msf_core::MSF_SensorManagerROS<
 
   void Init(double scale) const {
     Eigen::Matrix<double, 3, 1> p, v, b_w, b_a, g, w_m, a_m, p_ic, p_vc, p_wv;
-    Eigen::Quaternion<double> q, q_wv, q_ic, q_cv;
+    Eigen::Quaternion<double> q, q_wv, q_ic, q_vc;
     msf_core::MSF_Core<EKFState_T>::ErrorStateCov P;
 
     // init values
-    g << 0, 0, 9.8128;	        /// Gravity.
+    g << 0, 0, 9.8;	        /// Gravity.
     b_w << 0, 0, 0;		/// Bias gyroscopes.
     b_a << 0, 0, 0;		/// Bias accelerometer.
 
-    v << 0, 0, 0;			/// Robot velocity (IMU centered).
+    v << 3, 0, 0;			/// Robot velocity (IMU centered).
     w_m << 0, 0, 0;		/// Initial angular velocity.
 
     P.setZero();  // Error state covariance; if zero, a default initialization in msf_core is used
 
     p_vc = pose_handler_->GetPositionMeasurement();
-    q_cv = pose_handler_->GetAttitudeMeasurement();
+    q_vc = pose_handler_->GetAttitudeMeasurement();
 
     MSF_INFO_STREAM(
-        "initial measurement pos:["<<p_vc.transpose()<<"] orientation: "<<STREAMQUAT(q_cv));
+        "initial measurement pos:["<<p_vc.transpose()<<"] orientation: "<<STREAMQUAT(q_vc));
 
     // Check if we have already input from the measurement sensor.
     if (p_vc.norm() == 0)
       MSF_WARN_STREAM(
           "No measurements received yet to initialize position - using [0 0 0]");
-    if (q_cv.w() == 1)
+    if (q_vc.w() == 1)
       MSF_WARN_STREAM(
           "No measurements received yet to initialize attitude - using [1 0 0 0]");
 
@@ -197,25 +198,44 @@ class PoseSensorManager : public msf_core::MSF_SensorManagerROS<
     pnh.param("pose_sensor/init/q_ic/z", q_ic.z(), 0.0);
     q_ic.normalize();
 
-    q_wv.setIdentity();  // Vision-world rotation drift.
-    p_wv.setZero();  // Vision-world position drift
+    pnh.param("pose_sensor/init/p_wv/x", p_wv[0], 0.0);
+    pnh.param("pose_sensor/init/p_wv/y", p_wv[1], 0.0);
+    pnh.param("pose_sensor/init/p_wv/z", p_wv[2], 0.0);
+
+    pnh.param("pose_sensor/init/q_wv/w", q_wv.w(), 1.0);
+    pnh.param("pose_sensor/init/q_wv/x", q_wv.x(), 0.0);
+    pnh.param("pose_sensor/init/q_wv/y", q_wv.y(), 0.0);
+    pnh.param("pose_sensor/init/q_wv/z", q_wv.z(), 0.0);
+    q_wv.normalize();
+
+    // q_wv.setIdentity();  // Vision-world rotation drift.
+    // p_wv.setZero();  // Vision-world position drift
 
     // Calculate initial attitude and position based on sensor measurements.
 
-//  if (!pose_handler_->ReceivedFirstMeasurement()) {  //this judgement is always wrong, If there is no pose measurement, only apply q_wv.
-//   q = q_wv;
-//  } else {  // If there is a pose measurement, apply q_ic and q_wv to get initial attitude.
-    q = (q_ic * q_cv.conjugate() * q_wv).conjugate(); //this way will decrease the converge time of WI
-
-//  }
+  //if (q_vc.w() == 1) {  //this judgement is always wrong, If there is no pose measurement, only apply q_wv.
+    // tripleg: no pose sensor measurment
+    //std::cout << "q_vc.w() == 1\n";
+    //q = /*q_wv;*/Eigen::Quaterniond(0.7071, 0, 0, -0.7071);
+    //} else {  // If there is a pose measurement, apply q_ic and q_wv to get initial attitude.
+    //q = (q_ic * q_vc.conjugate() * q_wv).conjugate(); //this way will decrease the converge time of WI
+   //}
+  pnh.param("pose_sensor/init/q/w", q.w(), 1.0);
+  pnh.param("pose_sensor/init/q/x", q.x(), 0.0);
+  pnh.param("pose_sensor/init/q/y", q.y(), 0.0);
+  pnh.param("pose_sensor/init/q/z", q.z(), 0.0);
 
 //    p.setZero();
 //*/
     q.normalize();
-    p = p_wv + q_wv.conjugate().toRotationMatrix() * p_vc / scale
-          - q.toRotationMatrix() * p_ic;
+    //// p = p_wv + q_wv.conjugate().toRotationMatrix() * p_vc / scale
+    ////      - q.toRotationMatrix() * p_ic;
+    p << 18.52, -15.22, 31;
 
     a_m = q.inverse() * g;			/// Initial acceleration.
+
+    MSF_WARN_STREAM("q_wi_initial " << STREAMQUAT(q));
+    MSF_WARN_STREAM("q_wv_initial " << STREAMQUAT(q_wv));
 
     // Prepare init "measurement"
     // True means that this message contains initial sensor readings.
@@ -239,6 +259,22 @@ class PoseSensorManager : public msf_core::MSF_SensorManagerROS<
     meas->Geta_m() = a_m;
     meas->time = ros::Time::now().toSec();
 
+
+    std::cout << "----------------------------------\n";
+    MSF_INFO_STREAM("p: "  << p.transpose());
+    MSF_INFO_STREAM("v: "  << v.transpose());
+    MSF_INFO_STREAM("q: "  << STREAMQUAT(q));
+    MSF_INFO_STREAM("b_w: "  << b_w.transpose());
+    MSF_INFO_STREAM("b_a: "  << b_a.transpose());
+    MSF_INFO_STREAM("scale: "  << scale);
+    MSF_INFO_STREAM("q_wv: "  << STREAMQUAT(q_wv));
+    MSF_INFO_STREAM("p_wv: "  << p_wv.transpose());
+    MSF_INFO_STREAM("q_ic: "  << STREAMQUAT(q_ic));
+    MSF_INFO_STREAM("p_ic: "  << p_ic.transpose());
+    std::cout << "----------------------------------\n";
+
+    MSF_WARN_STREAM("Initialized success");
+
     // Call initialization in core.
     msf_core_->Init(meas);
 
@@ -251,6 +287,7 @@ class PoseSensorManager : public msf_core::MSF_SensorManagerROS<
     scale << 1.0;
     state.Set < StateDefinition_T::L > (scale);
   }
+  
   virtual void InitState(EKFState_T& state) const {
     UNUSED(state);
   }

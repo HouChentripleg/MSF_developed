@@ -21,6 +21,7 @@
 #include <msf_core/msf_types.h>
 #include <msf_core/eigen_utils.h>
 #include <msf_core/gps_conversion.h>
+#include <iostream>
 
 namespace msf_position_sensor {
 template<typename MEASUREMENT_TYPE, typename MANAGER_TYPE>
@@ -31,15 +32,16 @@ PositionSensorHandler<MEASUREMENT_TYPE, MANAGER_TYPE>::PositionSensorHandler(
                                            parameternamespace),
       n_zp_(1e-6),
       delay_(0) {
+  std::cout << "3.1 position_handler starts to init...\n";
   ros::NodeHandle pnh ("~/" + parameternamespace);
 
   MSF_INFO_STREAM(
             "Loading parameters for position sensor from namespace: "
                     << pnh.getNamespace());
 
-  pnh.param("position_use_fixed_covariance", use_fixed_covariance_, false);
+  pnh.param("position_use_fixed_covariance", use_fixed_covariance_, true);
   pnh.param("position_absolute_measurements", provides_absolute_measurements_,
-            false);
+            true);
   pnh.param("enable_mah_outlier_rejection", enable_mah_outlier_rejection_, false);
   pnh.param("mah_threshold", mah_threshold_, msf_core::kDefaultMahThreshold_);
 
@@ -53,19 +55,21 @@ PositionSensorHandler<MEASUREMENT_TYPE, MANAGER_TYPE>::PositionSensorHandler(
   MSF_INFO_STREAM_COND(!provides_absolute_measurements_, "Position sensor is "
                        "handling measurements as relative values");
 
-  ros::NodeHandle nh("msf_updates_gps");
+  ros::NodeHandle nh("msf_updates_vlp");
 
-  subPointStamped_ =
-      nh.subscribe<geometry_msgs::PointStamped>
-  ("position_input", 20, &PositionSensorHandler::MeasurementCallback, this);
-//  subTransformStamped_ =
-//      nh.subscribe<geometry_msgs::TransformStamped>
-  subNavSatFix_ =
-      nh.subscribe<sensor_msgs::NavSatFix>
-  ("navsatfix_input", 20, &PositionSensorHandler::MeasurementCallback, this);
+//  subPointStamped_ =
+//      nh.subscribe<geometry_msgs::PointStamped>
+//  ("position_input", 20, &PositionSensorHandler::MeasurementCallback, this);
+//  subVLP = nh.subscribe<vlp_msgs::VLP>("position_input", 20, &PositionSensorHandler::MeasurementCallback, this);
+  subTransformStamped_ =
+      nh.subscribe<geometry_msgs::TransformStamped>
+    ("position_input", 20, &PositionSensorHandler::MeasurementCallback, this);
+//  subNavSatFix_ =
+//      nh.subscribe<sensor_msgs::NavSatFix>
+//  ("navsatfix_input", 20, &PositionSensorHandler::MeasurementCallback, this);
 
   z_p_.setZero();
-
+  std::cout << "3.2 position_handler inits sucesssfully!\n";
 }
 
 template<typename MEASUREMENT_TYPE, typename MANAGER_TYPE>
@@ -158,11 +162,11 @@ void PositionSensorHandler<MEASUREMENT_TYPE, MANAGER_TYPE>::MeasurementCallback(
           << this->topic_namespace_ << "/" << subTransformStamped_.getTopic()
           << " ***");
 
-  if (msg->header.seq % 5 != 0) {  //slow down vicon
-    MSF_WARN_STREAM_ONCE("Measurement throttling is on, dropping every but the "
-                         "5th message");
-    return;
-  }
+  // if (msg->header.seq % 5 != 0) {  //slow down vicon
+  //  MSF_WARN_STREAM_ONCE("Measurement throttling is on, dropping every but the "
+  //                       "5th message");
+  //  return;
+  //}
 
   sensor_fusion_comm::PointWithCovarianceStampedPtr pointwCov(
       new sensor_fusion_comm::PointWithCovarianceStamped);
@@ -172,6 +176,12 @@ void PositionSensorHandler<MEASUREMENT_TYPE, MANAGER_TYPE>::MeasurementCallback(
   pointwCov->point.x = msg->transform.translation.x;
   pointwCov->point.y = msg->transform.translation.y;
   pointwCov->point.z = msg->transform.translation.z;
+
+  std::cout << "PositionSensorHandler::MeasurementCallback(geometry_msgs::TransformStampedConstPtr& ): " 
+                                          << msg->header.stamp.toSec() << ' '
+                                          << msg->transform.translation.x << ' '
+                                          << msg->transform.translation.y << ' '
+                                          << msg->transform.translation.z << std::endl;
 
   ProcessPositionMeasurement(pointwCov);
 }

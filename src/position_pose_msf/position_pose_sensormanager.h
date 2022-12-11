@@ -40,6 +40,7 @@ typedef shared_ptr<ReconfigureServer> ReconfigureServerPtr;
 
 class PositionPoseSensorManager : public msf_core::MSF_SensorManagerROS<
     msf_updates::EKFState> {
+      
   typedef PositionPoseSensorManager this_T;
   typedef msf_pose_sensor::PoseSensorHandler<
       msf_updates::pose_measurement::PoseMeasurement<>, this_T> PoseSensorHandler_T;
@@ -147,15 +148,19 @@ class PositionPoseSensorManager : public msf_core::MSF_SensorManagerROS<
     msf_core::MSF_Core<EKFState_T>::ErrorStateCov P;
 
     // init values
-    g << 0, 0, 9.81;	/// Gravity.
+    g << 0, 0, 9.8;	/// Gravity.
     b_w << 0, 0, 0;		/// Bias gyroscopes.
     b_a << 0, 0, 0;		/// Bias accelerometer.
 
-    v << 0, 0, 0;			/// Robot velocity (IMU centered).
+    v << 3, 0, 0;			/// Robot velocity (IMU centered).
     w_m << 0, 0, 0;		/// Initial angular velocity.
 
     q_wv.setIdentity();  // World-vision rotation drift.
     p_wv.setZero();      // World-vision position drift.
+
+    // tripleg: init q_wv and q_wv
+    // p_wv << 18.527534, -15.21949, 31.0;
+    // Eigen::Quaternion<double> q_wv(0.504745, -0.495210, -0.495210, 0.504744);
 
     P.setZero();  // Error state covariance; if zero, a default initialization in msf_core is used.
 
@@ -196,18 +201,42 @@ class PositionPoseSensorManager : public msf_core::MSF_SensorManagerROS<
     pnh.param("position_sensor/init/p_ip/y", p_ip[1], 0.0);
     pnh.param("position_sensor/init/p_ip/z", p_ip[2], 0.0);
 
+    MSF_INFO_STREAM("p_ip: " << p_ip.transpose());
+
     // Calculate initial attitude and position based on sensor measurements
     // here we take the attitude from the pose sensor and augment it with
     // global yaw init.
+    /*
     double yawinit = config_.position_yaw_init / 180 * M_PI;
     Eigen::Quaterniond yawq(cos(yawinit / 2), 0, 0, sin(yawinit / 2));
     yawq.normalize();
 
+    
     q = yawq;
+    // tripleg: q means q_wi, but we use opposite value of yawq in yaml, so here is world -> imu -> camera -> vision, here we use q_vw replace q_wv
     q_wv = (q * q_ic * q_vc.conjugate()).conjugate();
+
+    MSF_INFO_STREAM("fake q_wv and real q_vw: " << STREAMQUAT(q_wv));
 
     MSF_WARN_STREAM("q_initial_wzd " << STREAMQUAT(q));
     MSF_WARN_STREAM("q_wv_initial_wzd " << STREAMQUAT(q_wv));
+    */
+    double yawinit = config_.position_yaw_init / 180 * M_PI;
+    Eigen::Quaterniond q_wv_yaw(cos(yawinit / 2), 0, 0, sin(yawinit / 2));
+    q_wv_yaw.normalize();
+
+    q_wv = q_wv_yaw.conjugate();
+
+     if(q_vc.w() == 1) {
+       // no pose measurement
+       q = q_wv;
+     } else {
+      q = (q_ic * q_vc.conjugate() * q_wv).conjugate();
+     }
+    q.normalize();
+
+    MSF_WARN_STREAM("q_wi_initial " << STREAMQUAT(q));
+    MSF_WARN_STREAM("q_wv_initial " << STREAMQUAT(q_wv));
 
     Eigen::Matrix<double, 3, 1> p_vision = q_wv.conjugate().toRotationMatrix()
         * p_vc / scale - q.toRotationMatrix() * p_ic;
@@ -217,6 +246,7 @@ class PositionPoseSensorManager : public msf_core::MSF_SensorManagerROS<
     // measurement.
     p = p_pos - q.toRotationMatrix() * p_ip;
     p_wv = p - p_vision;  // Shift the vision frame so that it fits the position
+  
     // measurement
 
     a_m = q.inverse() * g;			    /// Initial acceleration.
@@ -249,6 +279,21 @@ class PositionPoseSensorManager : public msf_core::MSF_SensorManagerROS<
     meas->Getw_m() = w_m;
     meas->Geta_m() = a_m;
     meas->time = ros::Time::now().toSec();
+
+    std::cout << "----------------------------------\n";
+    MSF_INFO_STREAM("p: "  << p.transpose());
+    MSF_INFO_STREAM("v: "  << v.transpose());
+    MSF_INFO_STREAM("q: "  << STREAMQUAT(q));
+    MSF_INFO_STREAM("b_w: "  << b_w.transpose());
+    MSF_INFO_STREAM("b_a: "  << b_a.transpose());
+    MSF_INFO_STREAM("scale: "  << scale);
+    MSF_INFO_STREAM("q_wv: "  << STREAMQUAT(q_wv));
+    MSF_INFO_STREAM("p_wv: "  << p_wv.transpose());
+    MSF_INFO_STREAM("q_ic: "  << STREAMQUAT(q_ic));
+    MSF_INFO_STREAM("p_ic: "  << p_ic.transpose());
+    MSF_INFO_STREAM("p_ip: "  << p_ip.transpose());
+    std::cout << "----------------------------------\n";
+
     MSF_WARN_STREAM("Initialized success");
     // Call initialization in core.
     msf_core_->Init(meas);

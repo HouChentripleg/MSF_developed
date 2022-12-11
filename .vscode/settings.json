@@ -1,5 +1,18 @@
 {
     "files.associations": {
-        "sstream": "cpp"
-    }
+        "sstream": "cpp",
+        "bitset": "cpp",
+        "random": "cpp"
+    },
+    "python.autoComplete.extraPaths": [
+        "/home/linux/MSF_developed/devel/lib/python2.7/dist-packages",
+        "/home/linux/catkin_ws/devel/lib/python2.7/dist-packages",
+        "/opt/ros/kinetic/lib/python2.7/dist-packages"
+    ],
+    "ros.distro": "kinetic",
+    "python.analysis.extraPaths": [
+        "/home/linux/MSF_developed/devel/lib/python2.7/dist-packages",
+        "/home/linux/catkin_ws/devel/lib/python2.7/dist-packages",
+        "/opt/ros/kinetic/lib/python2.7/dist-packages"
+    ]
 }

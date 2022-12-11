@@ -16,19 +16,42 @@
 #include <GeographicLib/Geodesic.hpp>
 #include <GeographicLib/LocalCartesian.hpp>
 
+#include <vector>
+#include <deque>
+#include <sstream>
+#include <fstream>
+#include "vlp_msgs/VLP.h"
+
 using namespace std;
 using namespace Eigen;
 
 #define SEQ_END 9999999999
-#define GPS_DIV_FREQ  100 //used to control the GPS and IMU freq
 #define SENSOR_SLEEP_TIME 15 //7 //used to control the sleep time between two loop
-
-Eigen::Matrix3d c1Rc0, c0Rc1;
-Eigen::Vector3d c1Tc0, c0Tc1;
+#define NS2S 0.000000001
 
 std::string SEASON_START_TIME;
 
-enum eSensorType{CAM, IMU, GNSS, IMU_GNSS};
+struct IMUData {
+    string timestamp;
+    double ax;
+    double ay;
+    double az;
+    double wx;
+    double wy;
+    double wz;
+};
+
+struct VLPData {
+    string timestamp;
+    double x;
+    double y;
+    double z;
+};
+
+deque<IMUData> imuDataDeq;
+deque<VLPData> vlpDataDeq;
+
+enum eSensorType{CAM, IMU, VLP_GPS};
 int main(int argc, char** argv) {
     // start-time
     auto start_time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
@@ -44,15 +67,14 @@ int main(int argc, char** argv) {
     // Publisher
     ros::Publisher pubImage = nh.advertise<sensor_msgs::Image>("/camera/rgb/image_raw",1000);
     ros::Publisher pubImu = nh.advertise<sensor_msgs::Imu>("/imu",1000);
-    ros::Publisher pubOrignGnss = nh.advertise<sensor_msgs::NavSatFix>("/gps/fix",1000);
+    ros::Publisher pubVLP = nh.advertise<vlp_msgs::VLP>("/vlp",1000);
 
     if(argc != 3) {
         cout << "Wrong Usage!\n";
-        cout << "rosrun ai_robot_lcsfl read_mono /home/linux/KITTI/RawData/2011_10_03/2011_10_03_drive_0027_sync noised-04";
+        cout << "rosrun ai_robot_lcsfl read_mono /home/linux/KITTI/Blender_1600 noise";
         return 1;
     }
     
-    // dataPath = ".../KITTI_Data/RawData/2011_10_03/2011_10_03_drive_0027_sync"
     string sequence = argv[1];
     string dataPath = sequence + "/";
     cout << "read sequence: "<< dataPath << endl;
@@ -60,57 +82,136 @@ int main(int argc, char** argv) {
     string oxtsType = argv[2];
     printf("oxts type: %s\n", argv[2]);
 
-    list<pair<double, eSensorType>> pairTimeTypeList;
+    /*
+    string sequence = "/home/linux/KITTI/Blender_1600";
+    string dataPath = sequence + "/";
+    string oxtsType = "noise";
+    cout << dataPath << endl;
+    */
+
+    vector<pair<double, eSensorType>> pairTimeTypeVec;
     {
-        // load image and store timestamp in imageTimeList
-        list<double> imageTimeList;
+        // load image and store timestamp in imageTimeVec
+        vector<double> imageTimeVec;
         {
-            FILE* file;
-            file = fopen((dataPath + "image_00/timestamps.txt").c_str(), "r");
-            if (file == NULL) {
-                printf("cannot find file: %simage_00/timestamps.txt \n", dataPath.c_str());
+            string pathImg = dataPath + "image/timestamps.txt";
+            ifstream fileImg(pathImg, ios::in);
+            if(fileImg.is_open()) {
+                string line;
+
+                while(getline(fileImg, line)) {
+                    istringstream str(line);
+
+                    string str_timestamp;
+                    while(str >> str_timestamp) {
+                        imageTimeVec.emplace_back(stold(str_timestamp.c_str()));
+                    }
+                }
+            } else {
+                cout << "cannot find file "  << pathImg << endl;
                 ROS_BREAK();
                 return 0;
             }
             
-            int year, month, day;
-            int hour, minute;
-            double second;
-            while (fscanf(file, "%d-%d-%d %d:%d:%lf", &year, &month, &day, &hour, &minute, &second) != EOF) {
-                imageTimeList.emplace_back(hour * 60 * 60 + minute * 60 + second );
-            }
-            std::fclose(file);
+            fileImg.close();
         }
-
-        // load gps-imu and store timestamp in imu_gpsTimeList
-        list<double> imu_gpsTimeList;
+        
+        // load imu and store timestamp in imuTimeVec
+        vector<double> imuTimeVec;
         {
-            FILE* file;
-            file = fopen((dataPath + "oxts-" + oxtsType + "/timestamps.txt").c_str(), "r");
-            if (file == NULL) {
-                printf("cannot find file: %soxts-%s/timestamps.txt \n", dataPath.c_str(),oxtsType.c_str());
+            string pathImu = dataPath + "oxts-" + oxtsType + "/imu/IMU_Acc_Gyro.txt";
+            ifstream fileImu(pathImu, ios::in);
+            if(fileImu.is_open()) {
+                string line;
+
+                while(getline(fileImu, line)) {
+                    istringstream str(line);
+
+                    string str_timestamp;
+                    string str_ax;
+                    string str_ay;
+                    string str_az;
+                    string str_wx;
+                    string str_wy;
+                    string str_wz;
+
+                    while(str >> str_timestamp >> str_ax >> str_ay >> str_az >> str_wx >> str_wy >> str_wz) {
+                        double t = stold(str_timestamp.c_str()) * NS2S;
+                        imuTimeVec.emplace_back(t);
+
+                        IMUData imu_data;
+                        imu_data.timestamp = to_string(stold(str_timestamp.c_str()) * NS2S);
+                        imu_data.ax = stold(str_ax.c_str());
+                        imu_data.ay = stold(str_ay.c_str());
+                        imu_data.az = stold(str_az.c_str());
+                        imu_data.wx = stold(str_wx.c_str());
+                        imu_data.wy = stold(str_wy.c_str());
+                        imu_data.wz = stold(str_wz.c_str());
+                        imuDataDeq.push_back(imu_data);
+                    }
+                }
+            } else {
+                cout << "cannot find file "  << pathImu << endl;
                 ROS_BREAK();
                 return 0;
             }
+            
+            fileImu.close();
+        }
 
-            int year, month, day;
-            int hour, minute;
-            double second;
-            while(fscanf(file, "%d-%d-%d %d:%d:%lf", &year, &month, &day, &hour, &minute, &second) != EOF) {
-                imu_gpsTimeList.emplace_back(hour * 60 * 60 + minute * 60 + second);
+        // load vlp and store timestamp in vlpTimeVec
+        vector<double> vlpTimeVec;
+        {
+            string pathVLP = dataPath + "oxts-" + oxtsType + "/vlp/position-VLP.txt";
+            ifstream fileVLP(pathVLP, ios::in);
+            if(fileVLP.is_open()) {
+                string line;
+
+                while(getline(fileVLP, line)) {
+                    istringstream str(line);
+
+                    string str_timestamp;
+                    string str_x;
+                    string str_y;
+                    string str_z;
+                    string str_qx;
+                    string str_qy;
+                    string str_qz;
+                    string str_qw;
+
+                    while(str >> str_timestamp >> str_x >> str_y >> str_z >> str_qx >> str_qy >> str_qz >> str_qw) {
+                        vlpTimeVec.emplace_back(stold(str_timestamp.c_str()));
+
+                        VLPData vlp_data;
+                        vlp_data.timestamp = str_timestamp;
+                        vlp_data.x = stold(str_x.c_str());
+                        vlp_data.y = stold(str_y.c_str());
+                        vlp_data.z = stold(str_z.c_str());
+                        vlpDataDeq.push_back(vlp_data);
+                    }
+                }
+            } else {
+                cout << "cannot find file "  << pathVLP << endl;
+                ROS_BREAK();
+                return 0;
             }
-            std::fclose(file);
+            
+            fileVLP.close();
         }
 
         // timestamp fusion
-        auto imgItr(imageTimeList.begin());
-        auto imu_gpsItr(imu_gpsTimeList.begin());
-        while(imgItr != imageTimeList.end() && imu_gpsItr != imu_gpsTimeList.end()) {
-            if(imgItr != imageTimeList.end() && *imgItr < *imu_gpsItr) {
-                pairTimeTypeList.emplace_back(make_pair(*imgItr++, CAM));
+        auto imgItr(imageTimeVec.begin());
+        auto imuItr(imuTimeVec.begin());
+        auto vlpItr(vlpTimeVec.begin());
+        while((imgItr != imageTimeVec.end() || vlpItr != vlpTimeVec.end()) && imuItr != imuTimeVec.end()) {
+            if(imgItr != imageTimeVec.end() && *imgItr < *imuItr) {
+                pairTimeTypeVec.emplace_back(make_pair(*imgItr++, CAM));
             }
-            else if(imu_gpsItr != imu_gpsTimeList.end()) {
-                pairTimeTypeList.emplace_back(make_pair(*imu_gpsItr++, IMU_GNSS));
+            else if(vlpItr != vlpTimeVec.end() && *vlpItr < *imuItr) {
+                pairTimeTypeVec.emplace_back(make_pair(*vlpItr++, VLP_GPS));
+            }
+            else if(imuItr != imuTimeVec.end()) {
+                pairTimeTypeVec.emplace_back(make_pair(*imuItr++, IMU));
             }
         }
     }
@@ -119,7 +220,7 @@ int main(int argc, char** argv) {
     string pathTL = "/home/linux/MSF_developed/src/MSF_developed/LOG/TimeList.txt";
     ofstream fileTL(pathTL, ios::out);
     if(fileTL.is_open()) {
-        for(auto elem : pairTimeTypeList) {
+        for(auto elem : pairTimeTypeVec) {
             fileTL << to_string(elem.first) << ' ' << elem.second << endl;
         }
     }
@@ -127,32 +228,30 @@ int main(int argc, char** argv) {
     string ImagePath;
     cv::Mat img;
 
-    const int imu_begin_idx(0); // 300
+    const int imu_begin_idx(0);
     const int imu_end_idx(SEQ_END);
 
     const int img_begin_idx(0);
     const int img_end_idx(SEQ_END);
 
-    int imageIdx = 0;
-    int imu_gnssIdx = 0;
-    int first_img_idx = -1;
-    const int gnss_ex_div(GPS_DIV_FREQ);
+    const int vlp_begin_idx(0);
 
-    for(auto itPairTimeType = pairTimeTypeList.begin(); itPairTimeType != pairTimeTypeList.end(); ++itPairTimeType) {
+    int imageIdx = 1;
+    int imuIdx = 0;
+    int vlpIdx = 0;
+    int first_img_idx = -1;
+
+    for(auto itPairTimeType = pairTimeTypeVec.begin(); itPairTimeType != pairTimeTypeVec.end(); ++itPairTimeType) {
         if(ros::ok()) {
             if(itPairTimeType->second == CAM ) {
                 // load img
                 stringstream ss;
-                ss << setfill('0') << setw(10) << imageIdx++;
-                if(imu_gnssIdx > imu_begin_idx && imageIdx > img_begin_idx
-                    && (next(itPairTimeType) == pairTimeTypeList.end() || next(itPairTimeType)->second != CAM)) {
-                    cout << "imu_gnssIdx: " << imu_gnssIdx << " imageIdx: " << imageIdx << endl;
-                    cout << "first_img_idx: " << first_img_idx << endl;
-
-                    if (first_img_idx == -1) first_img_idx = imageIdx-1;    // the first image idx should be 0 in process
+                ss << setfill('0') << setw(5) << imageIdx;
+                if(imageIdx > img_begin_idx
+                    && (next(itPairTimeType) == pairTimeTypeVec.end() || next(itPairTimeType)->second != CAM)) {
+                    if (first_img_idx == -1) first_img_idx = imageIdx - 1;
                     
-                    ImagePath = dataPath + "image_00/data/" + ss.str() + ".png";
-                    cout << "image path: " << ImagePath << endl;
+                    ImagePath = dataPath + "image/data/" + ss.str() + ".png";
                     img = cv::imread(ImagePath, CV_LOAD_IMAGE_GRAYSCALE);
                     sensor_msgs::ImagePtr imgMsg = cv_bridge::CvImage(std_msgs::Header(), "mono8", img).toImageMsg();
                     imgMsg->header.stamp = ros::Time(itPairTimeType->first);
@@ -160,46 +259,50 @@ int main(int argc, char** argv) {
                     pubImage.publish(imgMsg);
 
                     ROS_INFO("Input Image, time:%f, seq:%d", itPairTimeType->first, imageIdx);
+                    ++imageIdx;
                 }
             }
-            else if(itPairTimeType->second == IMU_GNSS) {
-                stringstream ss;
-                ss << setfill('0') << setw(10) << imu_gnssIdx++;
+            else if(itPairTimeType->second == VLP_GPS) {
+                // use vlpDataDeq
+                if(vlpIdx >= vlp_begin_idx
+                    && (next(itPairTimeType) == pairTimeTypeVec.end() || next(itPairTimeType)->second != VLP_GPS)) {
+                        vlp_msgs::VLP vlp_position;
 
-                if(imu_gnssIdx > imu_end_idx || imageIdx > img_end_idx) break;
+                        VLPData vlp_elem = vlpDataDeq.front();
+                        vlp_position.timestamp = vlp_elem.timestamp;
+                        vlp_position.position_x = vlp_elem.x;
+                        vlp_position.position_y = vlp_elem.y;
+                        vlp_position.position_z = vlp_elem.z;
+                        vlpDataDeq.pop_front();
 
-                if(first_img_idx > -1) {
-                    FILE* GPSFile;
-                    string GPSFilePath = dataPath + "oxts-"+ oxtsType + "/data/" + ss.str() + ".txt";
-                    GPSFile = fopen(GPSFilePath.c_str(), "r");
-                    if(GPSFile == NULL) {
-                        printf("cannot find file: %s\n", GPSFilePath.c_str());
-                        ROS_BREAK();
-                        return 0;
+                        pubVLP.publish(vlp_position);
+                        ROS_INFO("Input VLP, time:%f, seq:%d", itPairTimeType->first, vlpIdx++);
+                        cout << "VLP details: " << vlp_elem.timestamp << ' ' << vlp_elem.x << ' ' << vlp_elem.y << ' ' << vlp_elem.z << endl;
                     }
+            }
+            else if(itPairTimeType->second == IMU) {
+                if(imuIdx > imu_end_idx || imageIdx > img_end_idx) break;
 
-                    double lat, lon, alt, roll, pitch, yaw;
-                    double vn, ve, vf, vl, vu;
-                    double ax, ay, az, af, al, au;
-                    double wx, wy, wz, wf, wl, wu;
-                    double pos_accuracy, vel_accuracy;
-                    double navstat, numsats;
-                    double velmode, orimode;
-
-                    fscanf(GPSFile, "%lf %lf %lf %lf %lf %lf ", &lat, &lon, &alt, &roll, &pitch, &yaw);
-                    fscanf(GPSFile, "%lf %lf %lf %lf %lf ", &vn, &ve, &vf, &vl, &vu);
-                    fscanf(GPSFile, "%lf %lf %lf %lf %lf %lf ", &ax, &ay, &az, &af, &al, &au);
-                    fscanf(GPSFile, "%lf %lf %lf %lf %lf %lf ", &wx, &wy, &wz, &wf, &wl, &wu);
-                    fscanf(GPSFile, "%lf %lf %lf %lf %lf %lf ", &pos_accuracy, &vel_accuracy, &navstat, &numsats, &velmode,
-                    &orimode);
-
-                    fclose(GPSFile);
+                if(first_img_idx >= -1) {
+                    // use imuDataDeq
+                    double ax, ay, az;
+                    double wx, wy, wz;
+                    string ts;
+                    IMUData imu_elem = imuDataDeq.front();
+                    imuDataDeq.pop_front();
+                    ts = imu_elem.timestamp;
+                    ax = imu_elem.ax;
+                    ay = imu_elem.ay;
+                    az = imu_elem.az;
+                    wx = imu_elem.wx;
+                    wy = imu_elem.wy;
+                    wz = imu_elem.wz;
 
                     Vector3d linearAcceleration(ax, ay, az);
                     Vector3d angularVelocity(wx, wy, wz);
                     sensor_msgs::Imu msgImu;
                     msgImu.header.frame_id = "body";
-                    msgImu.header.stamp = ros::Time(itPairTimeType->first);
+                    msgImu.header.stamp = ros::Time(stold(ts.c_str()));
                     msgImu.linear_acceleration.x = ax;
                     msgImu.linear_acceleration.y = ay;
                     msgImu.linear_acceleration.z = az;
@@ -208,37 +311,9 @@ int main(int argc, char** argv) {
                     msgImu.angular_velocity.z = wz;
 
                     pubImu.publish(msgImu);
-                    ROS_INFO("Input IMU, time:%f, seq:%d", itPairTimeType->first, imu_gnssIdx);
-                    printf("lat:%lf lon:%lf alt:%lf roll:%lf pitch:%lf yaw:%lf \n",  lat, lon, alt, roll, pitch, yaw);
-                    printf("vn:%lf ve:%lf vf:%lf vl:%lf vu:%lf \n",  vn, ve, vf, vl, vu);
-                    printf("ax:%lf ay:%lf az:%lf af:%lf al:%lf au:%lf\n",  ax, ay, az, af, al, au);
-                    printf("wx:%lf wy:%lf wz:%lf wf:%lf wl:%lf wu:%lf\n",  wx, wy, wz, wf, wl, wu);
-                    printf("pos_accuracy:%lf vel_accuracy:%lf navstat:%lf numsats:%lf velmode:%lf orimode:%lf\n",
-                            pos_accuracy, vel_accuracy, navstat, numsats, velmode, orimode);
-
-                    if((imu_gnssIdx % gnss_ex_div == 0) && lat > 0) {
-                        sensor_msgs::NavSatFix gps_position;
-                        gps_position.header.frame_id = "gnss";
-                        gps_position.header.stamp = ros::Time(itPairTimeType->first);
-                        gps_position.status.status = navstat;
-                        gps_position.status.service = numsats;
-                        gps_position.latitude = lat;
-                        gps_position.longitude = lon;
-                        gps_position.altitude = alt;
-                        gps_position.position_covariance[0] = pos_accuracy;
-                        gps_position.position_covariance[4] = pos_accuracy;
-                        gps_position.position_covariance[8] = pos_accuracy;
-
-                        pubOrignGnss.publish(gps_position);
-                        ROS_INFO("Input GNSS, time:%f, seq:%d", itPairTimeType->first, imu_gnssIdx);
-                        printf("lat:%lf lon:%lf alt:%lf roll:%lf pitch:%lf yaw:%lf \n",  lat, lon, alt, roll, pitch, yaw);
-                        printf("vn:%lf ve:%lf vf:%lf vl:%lf vu:%lf \n",  vn, ve, vf, vl, vu);
-                        printf("ax:%lf ay:%lf az:%lf af:%lf al:%lf au:%lf\n",  ax, ay, az, af, al, au);
-                        printf("wx:%lf wy:%lf wz:%lf wf:%lf wl:%lf wu:%lf\n",  wx, wy, wz, wf, wl, wu);
-                        printf("pos_accuracy:%lf vel_accuracy:%lf navstat:%lf numsats:%lf velmode:%lf orimode:%lf\n",
-                                pos_accuracy, vel_accuracy, navstat, numsats, velmode, orimode);
-
-                    }
+                    ROS_INFO("Input IMU, time:%f, seq:%d", itPairTimeType->first, imuIdx++);
+                    cout << "ax ay az: " << ax << ' ' << ay << ' ' << az << endl;
+                    cout << "wx wy wz: " << wx << ' ' << wy << ' ' << wz << endl;
                 }
 
                 std::this_thread::sleep_for(std::chrono::milliseconds(SENSOR_SLEEP_TIME));
