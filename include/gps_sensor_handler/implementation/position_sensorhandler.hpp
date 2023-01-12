@@ -178,7 +178,7 @@ void PositionSensorHandler<MEASUREMENT_TYPE, MANAGER_TYPE>::MeasurementCallback(
   pointwCov->point.z = msg->transform.translation.z;
 
   std::cout << "PositionSensorHandler::MeasurementCallback(geometry_msgs::TransformStampedConstPtr& ): " 
-                                          << msg->header.stamp.toSec() << ' '
+                                          << std::to_string(msg->header.stamp.toSec()) << ' '
                                           << msg->transform.translation.x << ' '
                                           << msg->transform.translation.y << ' '
                                           << msg->transform.translation.z << std::endl;

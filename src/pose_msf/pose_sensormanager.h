@@ -228,9 +228,8 @@ public:
 //    p.setZero();
 //*/
     q.normalize();
-    //// p = p_wv + q_wv.conjugate().toRotationMatrix() * p_vc / scale
-    ////      - q.toRotationMatrix() * p_ic;
-    p << 18.52, -15.22, 31;
+    p = p_wv + q_wv.conjugate().toRotationMatrix() * p_vc / scale
+          - q.toRotationMatrix() * p_ic;
 
     a_m = q.inverse() * g;			/// Initial acceleration.
 

@@ -161,7 +161,6 @@ class PositionSensorManager : public msf_core::MSF_SensorManagerROS<
 
     // Calculate initial attitude and position based on sensor measurements.
     p = p_vc - q.toRotationMatrix() * p_ip;
-    // p << 18.52, -15.22, 31;
 
     a_m = q.inverse() * g;			    /// Initial acceleration.
 

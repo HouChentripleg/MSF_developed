@@ -103,7 +103,7 @@ int main(int argc, char** argv) {
         // load slam-pose and store timestamp in slamTimeVec
         vector<double> slamTimeVec;
         {
-            string pathSLAM = dataPath + "slam/KeyFrameTrajectory.txt";
+            string pathSLAM = dataPath + "slam/slamPose.txt";
             // string pathSLAM = dataPath + "slam/NeuroSLAM.txt";
             ifstream fileSLAM(pathSLAM, ios::in);
             if(fileSLAM.is_open()) {
@@ -255,7 +255,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    const int imu_begin_idx(300);
+    const int imu_begin_idx(100);
     const int imu_end_idx(SEQ_END);
 
     const int slam_begin_idx(0);
@@ -282,17 +282,18 @@ int main(int argc, char** argv) {
                     geometry_msgs::TransformStamped msgSLAM;
                     msgSLAM.header.stamp = ros::Time(stold(slam_elem.timestamp.c_str()));
                     msgSLAM.transform.translation.x = slam_elem.x;
-                    msgSLAM.transform.translation.y = slam_elem.y;
+                    msgSLAM.transform.translation.y = -slam_elem.y;
                     msgSLAM.transform.translation.z = slam_elem.z;
-                    msgSLAM.transform.rotation.x = slam_elem.qx;
-                    msgSLAM.transform.rotation.y = slam_elem.qy;
+                    // msgSLAM.transform.rotation.x = slam_elem.qx;
+                    // msgSLAM.transform.rotation.y = slam_elem.qy;
                     msgSLAM.transform.rotation.z = slam_elem.qz;
                     msgSLAM.transform.rotation.w = slam_elem.qw;
 
                     pubSLAM.publish(msgSLAM);
                     ROS_INFO("Input SLAM-Pose, time:%f, seq:%d", itPairTimeType->first, slamIdx);
                     cout << "x y z: " << slam_elem.x << ' ' << slam_elem.y << ' ' << slam_elem.z << endl;
-                    cout << "qx qy qz qw: " << slam_elem.qx << ' ' << slam_elem.qy << ' ' << slam_elem.qz << ' ' << slam_elem.qw << endl;
+                    // cout << "qx qy qz qw: " << slam_elem.qx << ' ' << slam_elem.qy << ' ' << slam_elem.qz << ' ' << slam_elem.qw << endl;
+                    cout << "qz qw: " << slam_elem.qz << ' ' << slam_elem.qw << endl;
                 } else {
                     slamDeq.pop_front();
                 }
@@ -312,14 +313,14 @@ int main(int argc, char** argv) {
                         vlp_position.position_z = vlp_elem.z;
                         */
                         vlp_position.header.stamp = ros::Time(stold(vlp_elem.timestamp.c_str()));
-                        vlp_position.transform.translation.x =vlp_elem.x;
-                        vlp_position.transform.translation.y =vlp_elem.y;
-                        vlp_position.transform.translation.z =vlp_elem.z;
+                        vlp_position.transform.translation.x = vlp_elem.x;
+                        vlp_position.transform.translation.y = vlp_elem.y;
                         vlpDataDeq.pop_front();
 
                         pubVLP.publish(vlp_position);
                         ROS_INFO("Input VLP, time:%f, seq:%d", itPairTimeType->first, vlpIdx);
-                        cout << "VLP details: " << vlp_elem.timestamp << ' ' << vlp_elem.x << ' ' << vlp_elem.y << ' ' << vlp_elem.z << endl;
+                        // cout << "VLP details: " << vlp_elem.timestamp << ' ' << vlp_elem.x << ' ' << vlp_elem.y << ' ' << vlp_elem.z << endl;
+                        cout << "VLP details: " << vlp_elem.timestamp << ' ' << vlp_elem.x << ' ' << vlp_elem.y << endl;
                 } else {
                     vlpDataDeq.pop_front();
                 }
@@ -355,7 +356,7 @@ int main(int argc, char** argv) {
                 msgImu.angular_velocity.z = wz;
 
                 pubImu.publish(msgImu);
-                ROS_INFO("Input IMU, time:%f, seq:%d", itPairTimeType->first, imuIdx++);
+                ROS_INFO("Input IMU, time:%f, seq:%d", itPairTimeType->first, imuIdx);
                 cout << "ax ay az: " << ax << ' ' << ay << ' ' << az << endl;
                 cout << "wx wy wz: " << wx << ' ' << wy << ' ' << wz << endl;
 

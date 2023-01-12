@@ -158,10 +158,6 @@ class PositionPoseSensorManager : public msf_core::MSF_SensorManagerROS<
     q_wv.setIdentity();  // World-vision rotation drift.
     p_wv.setZero();      // World-vision position drift.
 
-    // tripleg: init q_wv and q_wv
-    // p_wv << 18.527534, -15.21949, 31.0;
-    // Eigen::Quaternion<double> q_wv(0.504745, -0.495210, -0.495210, 0.504744);
-
     P.setZero();  // Error state covariance; if zero, a default initialization in msf_core is used.
 
     p_pos = position_handler_->GetPositionMeasurement();

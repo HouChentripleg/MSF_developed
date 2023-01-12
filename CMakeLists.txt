@@ -41,8 +41,8 @@ catkin_package(
 )
 # add_executable(read_node  src/read_dataset/main.cpp)
 #add_executable(lcsfl_node src/position_pose_msf/main.cpp)
-#add_executable(lcsfl_node src/pose_msf/main.cpp)
-add_executable(lcsfl_node src/position_msf/main.cpp)
+add_executable(lcsfl_node src/pose_msf/main.cpp)
+#add_executable(lcsfl_node src/position_msf/main.cpp)
 # add_executable(readMono  src/read_dataset/readMono.cpp)
 add_executable(readData src/read_dataset/readData.cpp)
 
