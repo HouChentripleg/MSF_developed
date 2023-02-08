@@ -24,5 +24,5 @@
     <!--    <node name="runslam" pkg = "ORB_SLAM2" type= "Stereo" args = "/home/wuzida/ORB_SLAM2/Vocabulary/ORBvoc.txt /home/wuzida/ORB_SLAM2/Examples/Stereo/KITTI00-02.yaml false" output="screen" />   -->
     <!--    <node name="runslam" pkg = "ORB_SLAM2" type= "Mono" args = "/home/linux/MSF_developed/src/ORB_SLAM2/Vocabulary/ORBvoc.txt /home/linux/MSF_developed/src/ORB_SLAM2/myCam.yaml" output="screen" />  -->
     <!--  <node name="readMono" pkg = "ai_robot_lcsfl" type = "readMono" args = "/home/linux/KITTI/Blender_1600 noise" output="screen" />    -->
-    <!--  <node name="readSLAM" pkg = "ai_robot_lcsfl" type = "readData" args = "/home/linux/KITTI/Blender_1600 noise" output="screen" />    -->
+    <!--  <node name="readSLAM" pkg = "ai_robot_lcsfl" type = "readData" args = "/home/linux/KITTI/Blender_1600 noise" output="screen" /> -->
 </launch>

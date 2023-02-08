@@ -31,6 +31,7 @@
 
 #include "sensor_fusion_comm/InitScale.h"
 #include "sensor_fusion_comm/InitHeight.h"
+#include "../../include/initPosition.h"
 
 namespace msf_updates {
 
@@ -136,6 +137,7 @@ class PositionPoseSensorManager : public msf_core::MSF_SensorManagerROS<
   bool InitScale(sensor_fusion_comm::InitScale::Request &req,
                    sensor_fusion_comm::InitScale::Response &res) {
       ROS_INFO("Initialize filter with scale %f", req.scale);
+      global_fixed_scale = req.scale;
       Init(req.scale);
       res.result = "Initialized scale";
       return true;
@@ -152,33 +154,14 @@ class PositionPoseSensorManager : public msf_core::MSF_SensorManagerROS<
     b_w << 0, 0, 0;		/// Bias gyroscopes.
     b_a << 0, 0, 0;		/// Bias accelerometer.
 
-    v << 3, 0, 0;			/// Robot velocity (IMU centered).
+    v << 0, 0, 0;			/// Robot velocity (IMU centered).
     w_m << 0, 0, 0;		/// Initial angular velocity.
 
     q_wv.setIdentity();  // World-vision rotation drift.
     p_wv.setZero();      // World-vision position drift.
 
     P.setZero();  // Error state covariance; if zero, a default initialization in msf_core is used.
-
-    p_pos = position_handler_->GetPositionMeasurement();
-
-    p_vc = pose_handler_->GetPositionMeasurement();
-    q_vc = pose_handler_->GetAttitudeMeasurement();
-
-    MSF_INFO_STREAM(
-        "initial measurement vision: pos:["<<p_vc.transpose()<<"] orientation: " <<STREAMQUAT(q_vc));
-    MSF_INFO_STREAM(
-        "initial measurement position: pos:["<<p_pos.transpose()<<"]");
-
-    // Check if we have already input from the measurement sensor.
-    if (!pose_handler_->ReceivedFirstMeasurement())
-      MSF_WARN_STREAM(
-          "No measurements received yet to initialize vision position and attitude - "
-          "using [0 0 0] and [1 0 0 0] respectively");
-    if (!position_handler_->ReceivedFirstMeasurement())
-      MSF_WARN_STREAM(
-          "No measurements received yet to initialize absolute position - using [0 0 0]");
-
+  
     ros::NodeHandle pnh("~");
     pnh.param("pose_sensor/init/p_ic/x", p_ic[0], 0.0);
     pnh.param("pose_sensor/init/p_ic/y", p_ic[1], 0.0);
@@ -199,6 +182,19 @@ class PositionPoseSensorManager : public msf_core::MSF_SensorManagerROS<
 
     MSF_INFO_STREAM("p_ip: " << p_ip.transpose());
 
+    // pnh.param("pose_sensor/init/p_wv/x", p_wv[0], 0.0);
+    // pnh.param("pose_sensor/init/p_wv/y", p_wv[1], 0.0);
+    // pnh.param("pose_sensor/init/p_wv/z", p_wv[2], 0.0);
+
+    pnh.param("pose_sensor/init/q_wv/w", q_wv.w(), 1.0);
+    pnh.param("pose_sensor/init/q_wv/x", q_wv.x(), 0.0);
+    pnh.param("pose_sensor/init/q_wv/y", q_wv.y(), 0.0);
+    pnh.param("pose_sensor/init/q_wv/z", q_wv.z(), 0.0);
+    q_wv.normalize();
+
+    // MSF_INFO_STREAM("p_wv: " << p_wv.transpose());
+    MSF_INFO_STREAM("q_wv: " << STREAMQUAT(q_wv));
+
     // Calculate initial attitude and position based on sensor measurements
     // here we take the attitude from the pose sensor and augment it with
     // global yaw init.
@@ -218,21 +214,33 @@ class PositionPoseSensorManager : public msf_core::MSF_SensorManagerROS<
     MSF_WARN_STREAM("q_wv_initial_wzd " << STREAMQUAT(q_wv));
     */
     double yawinit = config_.position_yaw_init / 180 * M_PI;
-    Eigen::Quaterniond q_wv_yaw(cos(yawinit / 2), 0, 0, sin(yawinit / 2));
-    q_wv_yaw.normalize();
+    Eigen::Quaterniond q_yaw(cos(yawinit / 2), 0, 0, sin(yawinit / 2));
+    q_yaw.normalize();
 
-    q_wv = q_wv_yaw.conjugate();
+    q = q_yaw;
 
-     if(q_vc.w() == 1) {
-       // no pose measurement
-       q = q_wv;
-     } else {
-      q = (q_ic * q_vc.conjugate() * q_wv).conjugate();
-     }
-    q.normalize();
-
-    MSF_WARN_STREAM("q_wi_initial " << STREAMQUAT(q));
+    MSF_WARN_STREAM("q_iw_initial " << STREAMQUAT(q));
     MSF_WARN_STREAM("q_wv_initial " << STREAMQUAT(q_wv));
+
+    // Check if we have already input from the measurement sensor.
+    if (!pose_handler_->ReceivedFirstMeasurement()) {
+      MSF_WARN_STREAM(
+          "No measurements received yet to initialize vision position and attitude - "
+          "using [0 0 0] and [1 0 0 0] respectively");
+    }
+    p_vc = pose_handler_->GetPositionMeasurement();
+    q_vc = pose_handler_->GetAttitudeMeasurement();
+
+    if (!position_handler_->ReceivedFirstMeasurement()) {
+       MSF_WARN_STREAM(
+          "No measurements received yet to initialize absolute position - using [0 0 0]");
+    }
+    p_pos = position_handler_->GetPositionMeasurement();
+
+    MSF_INFO_STREAM(
+        "initial measurement vision: pos:["<<p_vc.transpose()<<"] orientation: " <<STREAMQUAT(q_vc));
+    MSF_INFO_STREAM(
+        "initial measurement position: pos:["<<p_pos.transpose()<<"]");
 
     Eigen::Matrix<double, 3, 1> p_vision = q_wv.conjugate().toRotationMatrix()
         * p_vc / scale - q.toRotationMatrix() * p_ic;
@@ -242,9 +250,13 @@ class PositionPoseSensorManager : public msf_core::MSF_SensorManagerROS<
     // measurement.
     p = p_pos - q.toRotationMatrix() * p_ip;
     p_wv = p - p_vision;  // Shift the vision frame so that it fits the position
+    // p_wv = {20, -10, 0};
+
+    MSF_INFO_STREAM("p_vision: " << p_vision.transpose());
+    MSF_INFO_STREAM("p: " << p.transpose());
+    MSF_INFO_STREAM("p_wv: " << p_wv.transpose());
   
     // measurement
-
     a_m = q.inverse() * g;			    /// Initial acceleration.
 
     //TODO (slynen) Fix this.

@@ -168,7 +168,7 @@ public:
     b_w << 0, 0, 0;		/// Bias gyroscopes.
     b_a << 0, 0, 0;		/// Bias accelerometer.
 
-    v << 3, 0, 0;			/// Robot velocity (IMU centered).
+    v << 0, 0, 0;			/// Robot velocity (IMU centered).
     w_m << 0, 0, 0;		/// Initial angular velocity.
 
     P.setZero();  // Error state covariance; if zero, a default initialization in msf_core is used
@@ -198,9 +198,9 @@ public:
     pnh.param("pose_sensor/init/q_ic/z", q_ic.z(), 0.0);
     q_ic.normalize();
 
-    pnh.param("pose_sensor/init/p_wv/x", p_wv[0], 0.0);
-    pnh.param("pose_sensor/init/p_wv/y", p_wv[1], 0.0);
-    pnh.param("pose_sensor/init/p_wv/z", p_wv[2], 0.0);
+    // pnh.param("pose_sensor/init/p_wv/x", p_wv[0], 0.0);
+    // pnh.param("pose_sensor/init/p_wv/y", p_wv[1], 0.0);
+    // pnh.param("pose_sensor/init/p_wv/z", p_wv[2], 0.0);
 
     pnh.param("pose_sensor/init/q_wv/w", q_wv.w(), 1.0);
     pnh.param("pose_sensor/init/q_wv/x", q_wv.x(), 0.0);
@@ -209,21 +209,20 @@ public:
     q_wv.normalize();
 
     // q_wv.setIdentity();  // Vision-world rotation drift.
-    // p_wv.setZero();  // Vision-world position drift
+    p_wv.setZero();  // Vision-world position drift
 
     // Calculate initial attitude and position based on sensor measurements.
 
-  //if (q_vc.w() == 1) {  //this judgement is always wrong, If there is no pose measurement, only apply q_wv.
+  if (q_vc.w() == 1) {  //this judgement is always wrong, If there is no pose measurement, only apply q_wv.
     // tripleg: no pose sensor measurment
-    //std::cout << "q_vc.w() == 1\n";
-    //q = /*q_wv;*/Eigen::Quaterniond(0.7071, 0, 0, -0.7071);
-    //} else {  // If there is a pose measurement, apply q_ic and q_wv to get initial attitude.
-    //q = (q_ic * q_vc.conjugate() * q_wv).conjugate(); //this way will decrease the converge time of WI
-   //}
-  pnh.param("pose_sensor/init/q/w", q.w(), 1.0);
-  pnh.param("pose_sensor/init/q/x", q.x(), 0.0);
-  pnh.param("pose_sensor/init/q/y", q.y(), 0.0);
-  pnh.param("pose_sensor/init/q/z", q.z(), 0.0);
+    q = q_wv;
+    } else {  // If there is a pose measurement, apply q_ic and q_wv to get initial attitude.
+    q = (q_ic * q_vc.conjugate() * q_wv).conjugate(); //this way will decrease the converge time of WI
+   }
+    // pnh.param("pose_sensor/init/q/w", q.w(), 1.0);
+    // pnh.param("pose_sensor/init/q/x", q.x(), 0.0);
+    // pnh.param("pose_sensor/init/q/y", q.y(), 0.0);
+    // pnh.param("pose_sensor/init/q/z", q.z(), 0.0);
 
 //    p.setZero();
 //*/
@@ -233,8 +232,10 @@ public:
 
     a_m = q.inverse() * g;			/// Initial acceleration.
 
-    MSF_WARN_STREAM("q_wi_initial " << STREAMQUAT(q));
-    MSF_WARN_STREAM("q_wv_initial " << STREAMQUAT(q_wv));
+    MSF_INFO_STREAM("q_iw_initial " << STREAMQUAT(q));
+    MSF_INFO_STREAM("q_wv_initial " << STREAMQUAT(q_wv));
+    MSF_INFO_STREAM("p_iw: " << p.transpose());
+    MSF_INFO_STREAM("p_wv: " << p_wv.transpose());
 
     // Prepare init "measurement"
     // True means that this message contains initial sensor readings.

@@ -23,6 +23,9 @@ include_directories(
         include
   #      cfg
 	)
+set(SRC ./include/initPosition.cpp)
+set(INCLUDE ./include/initPosition.h)
+add_library(initP SHARED ${SRC} ${INCLUDE})
 #message("$$$$$$$$$" ${include_directories})
 generate_dynamic_reconfigure_options(
     cfg/SinglePoseSensor.cfg
@@ -40,11 +43,12 @@ catkin_package(
     	pose_distorter
 )
 # add_executable(read_node  src/read_dataset/main.cpp)
-#add_executable(lcsfl_node src/position_pose_msf/main.cpp)
-add_executable(lcsfl_node src/pose_msf/main.cpp)
+add_executable(lcsfl_node src/position_pose_msf/main.cpp)
+#add_executable(lcsfl_node src/pose_msf/main.cpp)
 #add_executable(lcsfl_node src/position_msf/main.cpp)
 # add_executable(readMono  src/read_dataset/readMono.cpp)
 add_executable(readData src/read_dataset/readData.cpp)
+target_link_libraries(lcsfl_node initP)
 
 target_link_libraries(lcsfl_node 
     ${catkin_LIBRARIES}

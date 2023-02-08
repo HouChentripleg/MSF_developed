@@ -255,10 +255,10 @@ int main(int argc, char** argv) {
         }
     }
 
-    const int imu_begin_idx(100);
+    const int imu_begin_idx(2);
     const int imu_end_idx(SEQ_END);
 
-    const int slam_begin_idx(0);
+    const int slam_begin_idx(2);
     const int slam_end_idx(SEQ_END);
 
     const int vlp_begin_idx(0);
@@ -267,6 +267,8 @@ int main(int argc, char** argv) {
     int slamIdx = 0;
     int imuIdx = 0;
     int vlpIdx = 0;
+    int first_slam_idx = -1;
+    int first_vlp_idx = -1;
 
     for(auto itPairTimeType = pairTimeTypeVec.begin(); itPairTimeType != pairTimeTypeVec.end(); ++itPairTimeType) {
         if(ros::ok()) {
@@ -275,6 +277,7 @@ int main(int argc, char** argv) {
                 if(imuIdx > imu_begin_idx &&
                     slamIdx > slam_begin_idx &&
                     (next(itPairTimeType) == pairTimeTypeVec.end() || next(itPairTimeType)->second != CAM)) {
+                    if(first_slam_idx == -1) first_slam_idx = slamIdx - 1;
                     // use slamDeq
                     SLAMData slam_elem = slamDeq.front();
                     slamDeq.pop_front();
@@ -301,7 +304,10 @@ int main(int argc, char** argv) {
             else if(itPairTimeType->second == VLP) {
                 vlpIdx++;
                 // use vlpDataDeq
-                if(vlpIdx > vlp_begin_idx && vlpIdx < vlp_end_idx) {
+                if(imuIdx > imu_begin_idx &&
+                    vlpIdx > vlp_begin_idx &&
+                    (next(itPairTimeType) == pairTimeTypeVec.end() || next(itPairTimeType)->second != VLP)) {
+                        if(first_vlp_idx == -1) first_vlp_idx = vlpIdx - 1;
                         // vlp_msgs::VLP vlp_position;
                         geometry_msgs::TransformStamped vlp_position;
 
@@ -329,6 +335,7 @@ int main(int argc, char** argv) {
                 imuIdx++;
                 if(imuIdx > imu_end_idx || slamIdx > slam_end_idx || vlpIdx > vlp_end_idx) break;
                 
+                // if(first_slam_idx > -1 || first_vlp_idx > -1) {
                 // use imuDataDeq
                 double ax, ay, az;
                 double wx, wy, wz;
@@ -359,6 +366,7 @@ int main(int argc, char** argv) {
                 ROS_INFO("Input IMU, time:%f, seq:%d", itPairTimeType->first, imuIdx);
                 cout << "ax ay az: " << ax << ' ' << ay << ' ' << az << endl;
                 cout << "wx wy wz: " << wx << ' ' << wy << ' ' << wz << endl;
+                // }
 
                 std::this_thread::sleep_for(std::chrono::milliseconds(SENSOR_SLEEP_TIME));
             }

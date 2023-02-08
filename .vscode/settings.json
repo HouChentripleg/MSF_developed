@@ -2,7 +2,8 @@
     "files.associations": {
         "sstream": "cpp",
         "bitset": "cpp",
-        "random": "cpp"
+        "random": "cpp",
+        "mutex": "cpp"
     },
     "python.autoComplete.extraPaths": [
         "/home/linux/MSF_developed/devel/lib/python2.7/dist-packages",

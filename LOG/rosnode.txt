@@ -1,4 +1,0 @@
-/read_mono
-/rosout
-/runslam
-/vision_sensor

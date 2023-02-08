@@ -297,6 +297,11 @@ struct PoseMeasurement : public PoseMeasurementBase {
       // Get a const ref, so we can read core states
       MSF_WARN_STREAM("***SLAM H Matrix is calculating***");
       const EKFState_T& state = *state_nonconst_new;
+
+      std::cout << "p before update: " << state.Get<StateDefinition_T::p>()[0] << ' '
+                                       << state.Get<StateDefinition_T::p>()[1] << ' '
+                                       << state.Get<StateDefinition_T::p>()[2] << std::endl;
+
       // init variables
       Eigen::Matrix<double, nMeasurements,
           msf_core::MSF_Core<EKFState_T>::nErrorStatesAtCompileTime> H_new;

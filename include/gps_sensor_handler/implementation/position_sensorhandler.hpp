@@ -22,8 +22,13 @@
 #include <msf_core/eigen_utils.h>
 #include <msf_core/gps_conversion.h>
 #include <iostream>
+#include <mutex>
+#include "../../initPosition.h"
 
 namespace msf_position_sensor {
+
+std::once_flag flag;
+
 template<typename MEASUREMENT_TYPE, typename MANAGER_TYPE>
 PositionSensorHandler<MEASUREMENT_TYPE, MANAGER_TYPE>::PositionSensorHandler(
     MANAGER_TYPE& meas, std::string topic_namespace,
@@ -152,9 +157,19 @@ void PositionSensorHandler<MEASUREMENT_TYPE, MANAGER_TYPE>::MeasurementCallback(
   ProcessPositionMeasurement(pointwCov);
 }
 
+void initPosition(const geometry_msgs::TransformStampedConstPtr& msg) {
+  MSF_INFO_STREAM("try to get init position...");
+
+  global_position_init[0] = msg->transform.translation.x;
+  global_position_init[1] = msg->transform.translation.y;
+  global_position_init[2] = msg->transform.translation.z;
+
+  MSF_INFO_STREAM("get init pos to global variables.");
+}
+
 template<typename MEASUREMENT_TYPE, typename MANAGER_TYPE>
 void PositionSensorHandler<MEASUREMENT_TYPE, MANAGER_TYPE>::MeasurementCallback(
-    const geometry_msgs::TransformStampedConstPtr & msg) {
+    const geometry_msgs::TransformStampedConstPtr& msg) {
   this->SequenceWatchDog(msg->header.seq, subTransformStamped_.getTopic());
 
   MSF_INFO_STREAM_ONCE(
@@ -167,6 +182,8 @@ void PositionSensorHandler<MEASUREMENT_TYPE, MANAGER_TYPE>::MeasurementCallback(
   //                       "5th message");
   //  return;
   //}
+
+  std::call_once(flag, initPosition, msg);
 
   sensor_fusion_comm::PointWithCovarianceStampedPtr pointwCov(
       new sensor_fusion_comm::PointWithCovarianceStamped);

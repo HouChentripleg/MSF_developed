@@ -18,6 +18,7 @@
  */
 #include <msf_core/eigen_utils.h>
 #include <msf_core/msf_types.h>
+#include "../../initPosition.h"
 
 #ifndef LCSFL_POSE_SENSORHANDLER_HPP_
 #define LCSFL_POSE_SENSORHANDLER_HPP_
@@ -46,7 +47,7 @@ PoseSensorHandler<MEASUREMENT_TYPE, MANAGER_TYPE>::PoseSensorHandler(
             true);
   pnh.param("pose_measurement_world_sensor", measurement_world_sensor_, true);
   pnh.param("pose_use_fixed_covariance", use_fixed_covariance_, true);
-  pnh.param("pose_measurement_minimum_dt", pose_measurement_minimum_dt_, 0.4);
+  pnh.param("pose_measurement_minimum_dt", pose_measurement_minimum_dt_, 0.04);
   pnh.param("enable_mah_outlier_rejection", enable_mah_outlier_rejection_, false);
   pnh.param("mah_threshold", mah_threshold_, msf_core::kDefaultMahThreshold_);
 
@@ -169,8 +170,7 @@ void PoseSensorHandler<MEASUREMENT_TYPE, MANAGER_TYPE>::ProcessPoseMeasurement(
       provides_absolute_measurements_, this->sensorID,
       enable_mah_outlier_rejection_, mah_threshold_, fixedstates, distorter_));
 
-  // meas->MakeFromSensorReading(msg, msg->header.stamp.toSec() - delay_);
-     meas->MakeFromSensorReading(msg, msg->header.stamp.toSec());
+  meas->MakeFromSensorReading(msg, msg->header.stamp.toSec() - delay_);
 
   z_p_ = meas->z_p_;  //store this for the init procedure
   z_q_ = meas->z_q_;
@@ -202,7 +202,7 @@ void PoseSensorHandler<MEASUREMENT_TYPE, MANAGER_TYPE>::MeasurementCallback(
 
 template<typename MEASUREMENT_TYPE, typename MANAGER_TYPE>
 void PoseSensorHandler<MEASUREMENT_TYPE, MANAGER_TYPE>::MeasurementCallback(
-    const geometry_msgs::TransformStampedConstPtr & msg) {
+    const geometry_msgs::TransformStampedConstPtr& msg) {
   std::cout << "PoseSensorHandler::MeasurementCallback(geometry_msgs::TransformStampedConstPtr&)\n";
   this->SequenceWatchDog(msg->header.seq, subTransformStamped_.getTopic());
   MSF_INFO_STREAM_ONCE(
@@ -245,17 +245,22 @@ void PoseSensorHandler<MEASUREMENT_TYPE, MANAGER_TYPE>::MeasurementCallback(
   pose->pose.pose.orientation.y = msg->transform.rotation.y;
   pose->pose.pose.orientation.z = msg->transform.rotation.z;
 
-  std::cout << "2. PoseMeasurementCallback() TransformStamped: " << msg->header.stamp << ' '
-                                      << msg->transform.translation.x << ' '
-                                      << msg->transform.translation.y << ' '
-                                      << msg->transform.translation.z << ' '
-                                      << msg->transform.rotation.x << ' '
-                                      << msg->transform.rotation.y << ' '
-                                      << msg->transform.rotation.z << ' '
-                                      << msg->transform.rotation.w << std::endl;
-  myfile << pose->pose.pose.position.x << ' ' << pose->pose.pose.position.y << ' ' << pose->pose.pose.position.z << ' '
+  // pose->pose.pose.position.x = pose->pose.pose.position.x / global_fixed_scale + global_position_init[0];
+  // pose->pose.pose.position.y = pose->pose.pose.position.y / global_fixed_scale + global_position_init[1];
+  // pose->pose.pose.position.z = pose->pose.pose.position.z / global_fixed_scale + global_position_init[2];
+
+  myfile << pose->header.stamp << ' '
+         << pose->pose.pose.position.x << ' ' << pose->pose.pose.position.y << ' ' << pose->pose.pose.position.z << ' '
          << pose->pose.pose.orientation.x << ' ' << pose->pose.pose.orientation.y << ' ' << pose->pose.pose.orientation.z << ' ' << pose->pose.pose.orientation.w << std::endl;
 
+  std::cout << "2. PoseMeasurementCallback() TransformStamped: " << pose->header.stamp << ' '
+                                      << pose->pose.pose.position.x << ' '
+                                      << pose->pose.pose.position.y << ' '
+                                      << pose->pose.pose.position.z << ' '
+                                      << pose->pose.pose.orientation.x << ' '
+                                      << pose->pose.pose.orientation.y << ' '
+                                      << pose->pose.pose.orientation.z << ' '
+                                      << pose->pose.pose.orientation.w << std::endl;
   ProcessPoseMeasurement(pose);
 }
 
